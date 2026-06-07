@@ -299,44 +299,67 @@ fun handleOptions(exchange: HttpExchange) {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
-fun main() {
-    var orsApiKey = System.getenv("ORS_API_KEY") ?: ""
-    if (orsApiKey.isBlank()) {
-        // Try local.properties
-        val localPropsFile = File("local.properties")
-        if (localPropsFile.exists()) {
+fun findApiKey(): String {
+    // 1. Check environment variable
+    val envKey = System.getenv("ORS_API_KEY")
+    if (!envKey.isNullOrBlank()) {
+        println("✓ Loaded ORS_API_KEY from environment variable")
+        return envKey
+    }
+
+    // 2. Check System property
+    val sysKey = System.getProperty("ORS_API_KEY")
+    if (!sysKey.isNullOrBlank()) {
+        println("✓ Loaded ORS_API_KEY from system property")
+        return sysKey
+    }
+
+    // 3. Traverse upwards from the current directory to find local.properties or .env
+    var dir: File? = File(".").absoluteFile
+    while (dir != null) {
+        val localProps = File(dir, "local.properties")
+        if (localProps.exists()) {
             try {
                 val props = java.util.Properties()
-                localPropsFile.inputStream().use { props.load(it) }
-                orsApiKey = props.getProperty("ORS_API_KEY") ?: ""
-            } catch (e: Exception) {
-                // ignore
-            }
+                localProps.inputStream().use { props.load(it) }
+                val key = props.getProperty("ORS_API_KEY")
+                if (!key.isNullOrBlank()) {
+                    println("✓ Loaded ORS_API_KEY from local.properties (${localProps.canonicalPath})")
+                    return key
+                }
+            } catch (e: Exception) { /* ignore */ }
         }
-    }
-    if (orsApiKey.isBlank()) {
-        // Try .env file
-        val envFile = File(".env")
+
+        val envFile = File(dir, ".env")
         if (envFile.exists()) {
             try {
                 envFile.readLines().forEach { line ->
                     val trimmed = line.trim()
                     if (trimmed.startsWith("ORS_API_KEY=")) {
-                        orsApiKey = trimmed.substringAfter("ORS_API_KEY=").trim().removeSurrounding("\"").removeSurrounding("'")
+                        val key = trimmed.substringAfter("ORS_API_KEY=").trim().removeSurrounding("\"").removeSurrounding("'")
+                        if (key.isNotBlank()) {
+                            println("✓ Loaded ORS_API_KEY from .env (${envFile.canonicalPath})")
+                            return key
+                        }
                     }
                 }
-            } catch (e: Exception) {
-                // ignore
-            }
+            } catch (e: Exception) { /* ignore */ }
         }
+
+        dir = dir.parentFile
     }
 
-    val orsConfigured = orsApiKey.isNotBlank()
-    val gson = Gson()
+    return ""
+}
 
+fun main() {
     println("==========================================================")
     println("              APEX DRIVE SCENIC ROUTE ENGINE              ")
     println("==========================================================")
+
+    val orsApiKey = findApiKey()
+    val orsConfigured = orsApiKey.isNotBlank()
+    val gson = Gson()
 
     if (!orsConfigured) {
         println("⚠ WARNING: ORS_API_KEY environment variable is not set.")
@@ -344,7 +367,7 @@ fun main() {
         println("  Get a free key at: https://openrouteservice.org/dev/#/signup")
         println("  Start with: ORS_API_KEY=your_key ./gradlew run")
     } else {
-        println("✓ ORS API key detected. Route generation is ready.")
+        println("✓ Route generation is ready.")
     }
 
     val orsService = if (orsConfigured) OrsRoutingService(orsApiKey) else null
