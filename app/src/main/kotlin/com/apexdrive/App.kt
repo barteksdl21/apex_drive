@@ -300,7 +300,37 @@ fun handleOptions(exchange: HttpExchange) {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 
 fun main() {
-    val orsApiKey = System.getenv("ORS_API_KEY") ?: ""
+    var orsApiKey = System.getenv("ORS_API_KEY") ?: ""
+    if (orsApiKey.isBlank()) {
+        // Try local.properties
+        val localPropsFile = File("local.properties")
+        if (localPropsFile.exists()) {
+            try {
+                val props = java.util.Properties()
+                localPropsFile.inputStream().use { props.load(it) }
+                orsApiKey = props.getProperty("ORS_API_KEY") ?: ""
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
+    }
+    if (orsApiKey.isBlank()) {
+        // Try .env file
+        val envFile = File(".env")
+        if (envFile.exists()) {
+            try {
+                envFile.readLines().forEach { line ->
+                    val trimmed = line.trim()
+                    if (trimmed.startsWith("ORS_API_KEY=")) {
+                        orsApiKey = trimmed.substringAfter("ORS_API_KEY=").trim().removeSurrounding("\"").removeSurrounding("'")
+                    }
+                }
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
+    }
+
     val orsConfigured = orsApiKey.isNotBlank()
     val gson = Gson()
 
