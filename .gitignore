@@ -6,3 +6,7 @@ build
 
 # Ignore Kotlin plugin data
 .kotlin
+
+# Local environment and secret files
+local.properties
+.env

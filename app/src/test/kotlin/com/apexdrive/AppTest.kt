@@ -1,52 +1,47 @@
 package com.apexdrive
 
-import kotlin.math.abs
 import org.junit.jupiter.api.Assertions.assertEquals
-import org.junit.jupiter.api.Assertions.assertFalse
 import org.junit.jupiter.api.Assertions.assertTrue
 import org.junit.jupiter.api.Test
+import kotlin.math.abs
 
 class AppTest {
-    private val engine = ScenicRouteEngine()
 
     @Test
-    fun generatesTwoToThreeClosedLoopSuggestions() {
-        val request = RouteRequest("Hillcrest", preferredLengthKm = 55, routeType = RouteType.CLOSED_LOOP)
-
-        val suggestions = engine.suggestRoutes(request)
-
-        assertTrue(suggestions.size in 2..3)
-        suggestions.forEach { suggestion ->
-            assertTrue(suggestion.isClosedLoop)
-            assertEquals("Hillcrest", suggestion.checkpoints.first())
-            assertEquals("Hillcrest", suggestion.checkpoints.last())
-            assertTrue(abs(suggestion.lengthKm - 55) <= (55 * 0.3).toInt())
-        }
+    fun destinationPointIsAccurate() {
+        // Travel 100 km due north from (0, 0) — should land near (0.899°, 0°)
+        val (lat, lng) = destinationPoint(0.0, 0.0, 0.0, 100.0)
+        assertTrue(abs(lat - 0.899) < 0.01, "Expected lat ~0.899 but got $lat")
+        assertTrue(abs(lng) < 0.001, "Expected lng ~0 but got $lng")
     }
 
     @Test
-    fun generatesTwoToThreeOneWaySuggestions() {
-        val request = RouteRequest("Hillcrest", preferredLengthKm = 55, routeType = RouteType.ONE_WAY)
-
-        val suggestions = engine.suggestRoutes(request)
-
-        assertTrue(suggestions.size in 2..3)
-        suggestions.forEach { suggestion ->
-            assertFalse(suggestion.isClosedLoop)
-            assertEquals("Hillcrest", suggestion.checkpoints.first())
-            assertTrue(suggestion.checkpoints.last() != "Hillcrest")
-        }
+    fun destinationPointBearingsAreDistinct() {
+        // Three bearings should produce three distinct destinations
+        val bearings = listOf(45.0, 155.0, 270.0)
+        val points = bearings.map { destinationPoint(51.5, -0.1, it, 50.0) }
+        val unique = points.toSet()
+        assertEquals(3, unique.size, "Expected 3 distinct destinations, got $unique")
     }
 
     @Test
-    fun prefersRoutesNearRequestedLength() {
-        val request = RouteRequest("Hillcrest", preferredLengthKm = 60, routeType = RouteType.CLOSED_LOOP)
+    fun routeTypeEnumHasBothValues() {
+        assertEquals(2, RouteType.entries.size)
+        assertTrue(RouteType.entries.contains(RouteType.CLOSED_LOOP))
+        assertTrue(RouteType.entries.contains(RouteType.ONE_WAY))
+    }
 
-        val suggestions = engine.suggestRoutes(request)
+    @Test
+    fun parseQueryParamsHandlesEmpty() {
+        val result = parseQueryParams(null)
+        assertTrue(result.isEmpty())
+    }
 
-        assertTrue(suggestions.isNotEmpty())
-        suggestions.forEach {
-            assertTrue(abs(it.lengthKm - 60) <= (60 * 0.3).toInt())
-        }
+    @Test
+    fun parseQueryParamsDecodesValues() {
+        val result = parseQueryParams("lat=51.5%2B1&lng=-0.1&length=60")
+        assertEquals("51.5+1", result["lat"])
+        assertEquals("-0.1", result["lng"])
+        assertEquals("60", result["length"])
     }
 }
