@@ -121,8 +121,7 @@ class OrsRoutingService(private val apiKey: String) {
               "coordinates": [$coordsJson],
               "options": { "avoid_features": ["highways", "tollways", "ferries"] },
               "extra_info": ["steepness", "waytype"],
-              "elevation": true,
-              "radii": [-1, -1, -1, -1]
+              "elevation": true
             }
         """.trimIndent()
     }
@@ -140,8 +139,7 @@ class OrsRoutingService(private val apiKey: String) {
           ],
           "options": { "avoid_features": ["highways", "tollways", "ferries"] },
           "extra_info": ["steepness", "waytype"],
-          "elevation": true,
-          "radii": [-1, -1, -1]
+          "elevation": true
         }
     """.trimIndent()
 
