@@ -69,16 +69,20 @@ class OrsRoutingService(private val apiKey: String) {
     ): List<RouteResult> {
         // Launch all ORS requests in parallel
         val futures: List<CompletableFuture<RouteResult?>> = when (routeType) {
-            RouteType.CLOSED_LOOP -> listOf(
-                // Vary seed and point count to get diverse route shapes
-                CompletableFuture.supplyAsync({ callOrs(roundTripBody(lng, lat, lengthKm, seed = 1, points = 3), isLoop = true) }, orsExecutor),
-                CompletableFuture.supplyAsync({ callOrs(roundTripBody(lng, lat, lengthKm, seed = 2, points = 5), isLoop = true) }, orsExecutor),
-                CompletableFuture.supplyAsync({ callOrs(roundTripBody(lng, lat, lengthKm, seed = 3, points = 7), isLoop = true) }, orsExecutor),
-            )
+            RouteType.CLOSED_LOOP -> {
+                // Generate 3 loop suggestions with diverse bearings (North, Southeast, West)
+                val bearings = listOf(30.0, 150.0, 270.0)
+                bearings.map { mainBearing ->
+                    val coords = createLoopCoords(lat, lng, lengthKm, mainBearing)
+                    CompletableFuture.supplyAsync({ callOrs(loopBody(coords), isLoop = true) }, orsExecutor)
+                }
+            }
             RouteType.ONE_WAY -> listOf(45.0, 155.0, 270.0).mapIndexed { i, bearing ->
                 // Route toward 3 different compass bearings; add slight mid-point offset for variety
-                val (destLat, destLng) = destinationPoint(lat, lng, bearing, lengthKm * 0.9)
-                val (midLat, midLng) = destinationPoint(lat, lng, bearing + (if (i % 2 == 0) 22.0 else -22.0), lengthKm * 0.45)
+                // Adjust by 1.3 circuity factor to get closer to actual road distance
+                val straightLength = lengthKm / 1.3
+                val (destLat, destLng) = destinationPoint(lat, lng, bearing, straightLength)
+                val (midLat, midLng) = destinationPoint(lat, lng, bearing + (if (i % 2 == 0) 20.0 else -20.0), straightLength * 0.5)
                 CompletableFuture.supplyAsync(
                     { callOrs(oneWayBody(lng, lat, midLng, midLat, destLng, destLat), isLoop = false) },
                     orsExecutor
@@ -97,15 +101,31 @@ class OrsRoutingService(private val apiKey: String) {
         }.take(3)
     }
 
-    private fun roundTripBody(lng: Double, lat: Double, lengthKm: Int, seed: Int, points: Int) = """
-        {
-          "coordinates": [[$lng, $lat]],
-          "options": { "avoid_features": ["highways", "tollways", "ferries"] },
-          "extra_info": ["steepness", "waytype"],
-          "elevation": true,
-          "round_trip": { "length": ${lengthKm * 1000}, "points": $points, "seed": $seed }
-        }
-    """.trimIndent()
+    private fun createLoopCoords(lat: Double, lng: Double, lengthKm: Int, mainBearing: Double): List<List<Double>> {
+        // Using an estimated circuity factor of 1.3 to compensate for road curves vs straight line distance
+        val d = lengthKm / (3.0 * 1.3)
+        val (lat1, lng1) = destinationPoint(lat, lng, mainBearing - 30.0, d)
+        val (lat2, lng2) = destinationPoint(lat, lng, mainBearing + 30.0, d)
+        return listOf(
+            listOf(lng, lat),
+            listOf(lng1, lat1),
+            listOf(lng2, lat2),
+            listOf(lng, lat)
+        )
+    }
+
+    private fun loopBody(coords: List<List<Double>>): String {
+        val coordsJson = coords.joinToString(",") { "[${it[0]}, ${it[1]}]" }
+        return """
+            {
+              "coordinates": [$coordsJson],
+              "options": { "avoid_features": ["highways", "tollways", "ferries"] },
+              "extra_info": ["steepness", "waytype"],
+              "elevation": true,
+              "radii": [-1, -1, -1, -1]
+            }
+        """.trimIndent()
+    }
 
     private fun oneWayBody(
         startLng: Double, startLat: Double,
@@ -120,7 +140,8 @@ class OrsRoutingService(private val apiKey: String) {
           ],
           "options": { "avoid_features": ["highways", "tollways", "ferries"] },
           "extra_info": ["steepness", "waytype"],
-          "elevation": true
+          "elevation": true,
+          "radii": [-1, -1, -1]
         }
     """.trimIndent()
 
