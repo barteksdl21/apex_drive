@@ -1,0 +1,857 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>APEX DRIVE // Scenic Route Generator</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Rajdhani', sans-serif;
+            background-color: #08090c;
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+        
+        .hud-font {
+            font-family: 'Orbitron', sans-serif;
+        }
+        
+        /* Custom Carbon-Grid background pattern */
+        .carbon-bg {
+            background-image: 
+                linear-gradient(45deg, #0f1015 25%, transparent 25%), 
+                linear-gradient(-45deg, #0f1015 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #0f1015 75%), 
+                linear-gradient(-45deg, transparent 75%, #0f1015 75%);
+            background-size: 10px 10px;
+            background-position: 0 0, 0 5px, 5px -5px, -5px 0px;
+        }
+
+        /* Glowing Effects */
+        .glow-red {
+            box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+            border-color: rgba(239, 68, 68, 0.6);
+        }
+        
+        .glow-orange {
+            box-shadow: 0 0 20px rgba(255, 83, 0, 0.35);
+        }
+        
+        .glow-cyan {
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.3);
+            border-color: rgba(6, 182, 212, 0.5);
+        }
+
+        .text-glow-orange {
+            text-shadow: 0 0 8px rgba(255, 83, 0, 0.6);
+        }
+
+        /* Customize scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #08090c;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #27272a;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #ff5300;
+        }
+
+        /* Leaflet custom map classes */
+        .glowing-line {
+            filter: drop-shadow(0 0 6px #ff5300);
+            stroke-linejoin: round;
+            stroke-linecap: round;
+        }
+        
+        .glowing-line-bg {
+            stroke-linejoin: round;
+            stroke-linecap: round;
+            opacity: 0.25;
+        }
+
+        /* Engine Button styling */
+        .engine-btn {
+            background: radial-gradient(circle, #e11d48 0%, #9f1239 100%);
+            border: 4px solid #1e293b;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .engine-btn:active {
+            transform: scale(0.92);
+            background: radial-gradient(circle, #be123c 0%, #4c0519 100%);
+        }
+        
+        .engine-btn-spinning {
+            animation: spin 3s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Pulse Animations */
+        @keyframes pulse-fast {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.7; }
+        }
+        .pulse-active {
+            animation: pulse-fast 1.5s infinite;
+        }
+    </style>
+</head>
+<body class="carbon-bg min-h-screen flex flex-col">
+
+    <!-- Header Navigation HUD -->
+    <header class="border-b border-zinc-800 bg-[#0c0d12]/95 backdrop-blur-md px-4 py-3 sticky top-0 z-[1000] flex items-center justify-between">
+        <div class="flex items-center space-x-3">
+            <!-- Sleek Automotive Logo Mark -->
+            <div class="bg-gradient-to-tr from-rose-600 to-orange-500 p-2 rounded-lg text-white font-black flex items-center justify-center glow-red">
+                <i data-lucide="gauge" class="w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="hud-font font-black text-xl tracking-wider text-transparent bg-clip-text bg-gradient-to-r from-white via-zinc-200 to-zinc-400">
+                    APEX_DRIVE <span class="text-orange-500 font-normal">//</span> <span class="text-sm font-semibold tracking-normal text-rose-500 uppercase hud-font">MVP v1.0</span>
+                </h1>
+                <p class="text-[10px] uppercase font-bold tracking-widest text-zinc-500">SCENIC DRIVE PATHFINDER</p>
+            </div>
+        </div>
+        
+        <!-- Status Badges for Automotive Feel -->
+        <div class="hidden md:flex items-center space-x-4 text-xs hud-font">
+            <div class="flex items-center space-x-1.5 bg-[#12141c] border border-emerald-500/30 px-3 py-1.5 rounded-full text-emerald-400">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="font-bold tracking-wider uppercase text-[10px]">ENGINE READY</span>
+            </div>
+            <div class="flex items-center space-x-1.5 bg-[#12141c] border border-cyan-500/30 px-3 py-1.5 rounded-full text-cyan-400">
+                <i data-lucide="navigation" class="w-3.5 h-3.5"></i>
+                <span class="font-bold tracking-wider uppercase text-[10px]">GPS SYNC: ONLINE</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content HUD Grid -->
+    <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-4 p-4 max-w-7xl mx-auto w-full">
+        
+        <!-- Left Column: Customization HUD (Console) -->
+        <div class="lg:col-span-4 flex flex-col space-y-4">
+            
+            <!-- Customization Panel -->
+            <div class="bg-[#0c0d12]/90 border border-zinc-800/80 rounded-xl p-5 backdrop-blur-md flex flex-col space-y-5 shadow-2xl relative overflow-hidden">
+                <!-- Red top decorative bar -->
+                <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-rose-600 via-orange-500 to-amber-500"></div>
+                
+                <div class="flex items-center justify-between border-b border-zinc-800 pb-2">
+                    <h2 class="hud-font font-black text-lg tracking-wider text-white flex items-center space-x-2">
+                        <i data-lucide="sliders" class="w-5 h-5 text-orange-500"></i>
+                        <span>DRIVE PROFILE</span>
+                    </h2>
+                    <span class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">SETUP ENGINE</span>
+                </div>
+                
+                <!-- STARTING LOCATION -->
+                <div class="flex flex-col space-y-1.5">
+                    <label class="text-xs uppercase font-bold tracking-wider text-zinc-400 flex justify-between">
+                        <span>STARTING BASE</span>
+                        <span class="text-orange-500">REQUIRED</span>
+                    </label>
+                    <div class="relative">
+                        <select id="startPosition" class="w-full bg-[#12141c] border border-zinc-700/80 rounded-lg py-2.5 px-3 text-sm text-white focus:outline-none focus:border-orange-500 transition-colors cursor-pointer appearance-none">
+                            <!-- Nodes loaded dynamically -->
+                        </select>
+                        <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-zinc-500">
+                            <i data-lucide="chevron-down" class="w-4 h-4"></i>
+                        </div>
+                    </div>
+                    <p id="startDescription" class="text-xs text-zinc-500 italic mt-1 leading-snug">
+                        Select a base to start your scenic run.
+                    </p>
+                </div>
+
+                <!-- ROUTE TYPE (DRIVE MODE) -->
+                <div class="flex flex-col space-y-1.5">
+                    <label class="text-xs uppercase font-bold tracking-wider text-zinc-400">ROUTE CONFIGURATION</label>
+                    <div class="grid grid-cols-2 gap-2 bg-[#12141c] p-1 rounded-lg border border-zinc-800">
+                        <button type="button" id="typeClosedLoop" onclick="setRouteType('CLOSED_LOOP')" 
+                            class="py-2 px-3 rounded-md text-xs uppercase font-black tracking-wider transition-all duration-200 bg-orange-600 text-white shadow-lg shadow-orange-950/20 border border-orange-500/20">
+                            <i data-lucide="refresh-cw" class="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5"></i>Closed Loop
+                        </button>
+                        <button type="button" id="typeOneWay" onclick="setRouteType('ONE_WAY')" 
+                            class="py-2 px-3 rounded-md text-xs uppercase font-black tracking-wider transition-all duration-200 text-zinc-400 hover:text-white hover:bg-zinc-800/50">
+                            <i data-lucide="arrow-right" class="w-3.5 h-3.5 inline-block mr-1.5 -mt-0.5"></i>One Way
+                        </button>
+                    </div>
+                </div>
+
+                <!-- PREFERRED LENGTH -->
+                <div class="flex flex-col space-y-2">
+                    <div class="flex justify-between items-end">
+                        <label class="text-xs uppercase font-bold tracking-wider text-zinc-400">TARGET DISTANCE</label>
+                        <div class="hud-font font-black text-xl text-orange-500 text-glow-orange">
+                            <span id="lengthValue">55</span> <span class="text-xs font-medium uppercase text-zinc-500">KM</span>
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <button onclick="adjustLength(-5)" class="w-8 h-8 rounded bg-[#12141c] border border-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white hover:border-orange-500 transition-colors font-bold text-lg">-</button>
+                        <input type="range" id="preferredLength" min="15" max="150" value="55" step="5" oninput="updateLengthValue(this.value)"
+                            class="flex-1 accent-orange-600 h-1.5 bg-zinc-800 rounded-lg cursor-pointer">
+                        <button onclick="adjustLength(5)" class="w-8 h-8 rounded bg-[#12141c] border border-zinc-700 flex items-center justify-center text-zinc-400 hover:text-white hover:border-orange-500 transition-colors font-bold text-lg">+</button>
+                    </div>
+                </div>
+
+                <!-- SLIDERS FOR TUNING WEIGHTS -->
+                <div class="border-t border-zinc-800 pt-4 flex flex-col space-y-4">
+                    <div class="flex justify-between items-center">
+                        <h3 class="text-xs uppercase font-bold tracking-widest text-zinc-500">DRIVE STYLE BIAS</h3>
+                        <button onclick="resetSliders()" class="text-[10px] uppercase font-bold text-orange-500 hover:text-orange-400">Reset</button>
+                    </div>
+
+                    <!-- Curviness Weight -->
+                    <div class="flex flex-col space-y-1">
+                        <div class="flex justify-between text-xs font-semibold">
+                            <span class="text-zinc-300 flex items-center"><i data-lucide="activity" class="w-3.5 h-3.5 text-orange-500 mr-1.5"></i>Curviness (Hairpins)</span>
+                            <span id="curvinessVal" class="hud-font text-orange-400">50%</span>
+                        </div>
+                        <input type="range" id="curvinessWeight" min="0" max="100" value="50" oninput="updateSliderText('curviness', this.value)"
+                            class="accent-orange-500 h-1 bg-zinc-800 rounded-lg cursor-pointer">
+                    </div>
+
+                    <!-- Elevation Weight -->
+                    <div class="flex flex-col space-y-1">
+                        <div class="flex justify-between text-xs font-semibold">
+                            <span class="text-zinc-300 flex items-center"><i data-lucide="trending-up" class="w-3.5 h-3.5 text-cyan-400 mr-1.5"></i>Elevation (Climbs)</span>
+                            <span id="elevationVal" class="hud-font text-cyan-400">30%</span>
+                        </div>
+                        <input type="range" id="elevationWeight" min="0" max="100" value="30" oninput="updateSliderText('elevation', this.value)"
+                            class="accent-cyan-500 h-1 bg-zinc-800 rounded-lg cursor-pointer">
+                    </div>
+
+                    <!-- Scenery Weight -->
+                    <div class="flex flex-col space-y-1">
+                        <div class="flex justify-between text-xs font-semibold">
+                            <span class="text-zinc-300 flex items-center"><i data-lucide="eye" class="w-3.5 h-3.5 text-emerald-400 mr-1.5"></i>Scenery (Vistas)</span>
+                            <span id="sceneryVal" class="hud-font text-emerald-400">20%</span>
+                        </div>
+                        <input type="range" id="sceneryWeight" min="0" max="100" value="20" oninput="updateSliderText('scenery', this.value)"
+                            class="accent-emerald-500 h-1 bg-zinc-800 rounded-lg cursor-pointer">
+                    </div>
+                </div>
+
+                <!-- ENGINE START BUTTON -->
+                <div class="pt-4 flex flex-col items-center justify-center">
+                    <button id="engineButton" onclick="generateRoutes()" class="relative group w-32 h-32 rounded-full flex flex-col items-center justify-center text-center focus:outline-none cursor-pointer">
+                        <!-- Outer rotating metallic frame -->
+                        <div class="absolute inset-0 rounded-full border-[3px] border-zinc-700/80 group-hover:border-orange-500 transition-colors duration-300"></div>
+                        <!-- Outer pulsating halo -->
+                        <div id="enginePulseRing" class="absolute -inset-1.5 rounded-full bg-rose-500/10 opacity-0 group-hover:opacity-100 group-hover:scale-105 blur-md transition-all duration-300 pulse-active"></div>
+                        <!-- Inner red engine cap -->
+                        <div class="absolute inset-2 rounded-full engine-btn flex flex-col items-center justify-center shadow-lg">
+                            <div class="hud-font font-black text-sm tracking-widest text-zinc-100 uppercase select-none leading-none">ENGINE</div>
+                            <div class="hud-font font-black text-lg tracking-wider text-white uppercase select-none my-0.5">START</div>
+                            <div class="hud-font font-black text-xs tracking-widest text-zinc-100 uppercase select-none leading-none opacity-80">STOP</div>
+                        </div>
+                    </button>
+                    <p class="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mt-3">TAP ENGINE TO CALCULATE ROUTES</p>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- Right Column: Navigation Screen & Map -->
+        <div class="lg:col-span-8 flex flex-col space-y-4">
+            
+            <!-- Interactive Sat-Nav HUD Screen -->
+            <div class="bg-[#0c0d12]/90 border border-zinc-800/80 rounded-xl overflow-hidden backdrop-blur-md flex flex-col flex-1 shadow-2xl relative min-h-[400px]">
+                <!-- Top HUD Bar -->
+                <div class="bg-[#12141c] border-b border-zinc-800 px-4 py-2 flex items-center justify-between text-xs uppercase font-bold text-zinc-400">
+                    <div class="flex items-center space-x-2">
+                        <i data-lucide="map" class="w-4 h-4 text-orange-500"></i>
+                        <span class="hud-font tracking-wider">APEX INTEGRATED MAP SCREEN</span>
+                    </div>
+                    <div class="flex items-center space-x-3 text-glow-orange text-orange-500 font-mono">
+                        <span id="mapLatLngHUD">Tahoe, CA // NW-GRID</span>
+                    </div>
+                </div>
+                
+                <!-- Map Container -->
+                <div class="flex-1 relative bg-zinc-950 min-h-[350px]" id="map">
+                    <!-- Leaflet map is injected here -->
+                </div>
+            </div>
+
+            <!-- Route Suggestions Display Drawer -->
+            <div class="bg-[#0c0d12]/90 border border-zinc-800/80 rounded-xl p-5 backdrop-blur-md flex flex-col space-y-4 shadow-2xl">
+                <div class="flex justify-between items-center border-b border-zinc-800 pb-2">
+                    <h2 class="hud-font font-black text-lg tracking-wider text-white flex items-center space-x-2">
+                        <i data-lucide="compass" class="w-5 h-5 text-orange-500"></i>
+                        <span>COMPUTED SUGGESTIONS</span>
+                    </h2>
+                    <span id="resultCount" class="text-xs font-bold text-zinc-500 bg-zinc-900 border border-zinc-800 px-2.5 py-0.5 rounded">0 ROUTES LOADED</span>
+                </div>
+
+                <!-- Suggestions list layout -->
+                <div id="suggestionsContainer" class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <!-- Muted state before calculation -->
+                    <div class="md:col-span-3 py-12 flex flex-col items-center justify-center text-center space-y-3">
+                        <div class="bg-[#12141c] p-4 rounded-full text-zinc-600 border border-zinc-800">
+                            <i data-lucide="radio" class="w-8 h-8 animate-pulse text-zinc-500"></i>
+                        </div>
+                        <div>
+                            <h3 class="hud-font font-bold text-zinc-400">AWAITING APEX ROUTE ALGORITHM</h3>
+                            <p class="text-xs text-zinc-500 max-w-sm mt-1 mx-auto leading-relaxed">
+                                Pick your starting base, set your target length, tune your driving styles, and press the red engine button to plot scenic drives.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+    <!-- Footer HUD Info -->
+    <footer class="border-t border-zinc-900 bg-[#06070a] py-3 px-4 mt-auto">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center text-xs text-zinc-500 font-semibold uppercase tracking-wider">
+            <div class="flex items-center space-x-2 mb-2 md:mb-0">
+                <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+                <span>APEX ENGINE: ON-BOARD CLIENT ACTIVE</span>
+            </div>
+            <div class="flex items-center space-x-4">
+                <span>LOCAL: <a href="http://localhost:8080" class="hover:underline text-zinc-400" id="localHostLink">localhost:8080</a></span>
+                <span id="mobileIpDisplay" class="text-orange-500">MOBILE IP: DETECTING...</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Interactive script -->
+    <script>
+        // Global State
+        let map;
+        let routeType = 'CLOSED_LOOP';
+        let nodes = {};
+        let roads = [];
+        let markers = {};
+        let activeRoutePolylines = [];
+        let defaultStartBase = 'Hillcrest';
+        
+        // Initialize App
+        window.addEventListener('DOMContentLoaded', () => {
+            initIcons();
+            initMap();
+            loadAppConfig();
+        });
+
+        function initIcons() {
+            lucide.createIcons();
+        }
+
+        // Initialize Map in Dark Mode
+        function initMap() {
+            // Default center around Lake Tahoe area coordinates we defined
+            map = L.map('map', {
+                zoomControl: true,
+                attributionControl: false
+            }).setView([39.09, -120.08], 11);
+
+            // Sleek Dark CartoDB Map Tiles
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+                maxZoom: 18
+            }).addTo(map);
+
+            // Track mouse coords for the HUD just for extra automotive aesthetic!
+            map.on('mousemove', (e) => {
+                const lat = e.latlng.lat.toFixed(4);
+                const lng = e.latlng.lng.toFixed(4);
+                document.getElementById('mapLatLngHUD').innerText = `${lat}° N , ${Math.abs(lng)}° W`;
+            });
+        }
+
+        // Set route type toggle UI state
+        function setRouteType(type) {
+            routeType = type;
+            const closedBtn = document.getElementById('typeClosedLoop');
+            const oneWayBtn = document.getElementById('typeOneWay');
+            
+            if (type === 'CLOSED_LOOP') {
+                closedBtn.className = "py-2 px-3 rounded-md text-xs uppercase font-black tracking-wider transition-all duration-200 bg-orange-600 text-white shadow-lg shadow-orange-950/20 border border-orange-500/20";
+                oneWayBtn.className = "py-2 px-3 rounded-md text-xs uppercase font-black tracking-wider transition-all duration-200 text-zinc-400 hover:text-white hover:bg-zinc-800/50";
+            } else {
+                oneWayBtn.className = "py-2 px-3 rounded-md text-xs uppercase font-black tracking-wider transition-all duration-200 bg-orange-600 text-white shadow-lg shadow-orange-950/20 border border-orange-500/20";
+                closedBtn.className = "py-2 px-3 rounded-md text-xs uppercase font-black tracking-wider transition-all duration-200 text-zinc-400 hover:text-white hover:bg-zinc-800/50";
+            }
+        }
+
+        // Update target distance label
+        function updateLengthValue(val) {
+            document.getElementById('lengthValue').innerText = val;
+        }
+
+        function adjustLength(diff) {
+            const slider = document.getElementById('preferredLength');
+            let newVal = parseInt(slider.value) + diff;
+            newVal = Math.max(15, Math.min(150, newVal));
+            slider.value = newVal;
+            updateLengthValue(newVal);
+        }
+
+        // Handle bias sliders text update
+        function updateSliderText(id, value) {
+            document.getElementById(id + 'Val').innerText = value + '%';
+        }
+
+        function resetSliders() {
+            document.getElementById('curvinessWeight').value = 50;
+            document.getElementById('elevationWeight').value = 30;
+            document.getElementById('sceneryWeight').value = 20;
+            updateSliderText('curviness', 50);
+            updateSliderText('elevation', 30);
+            updateSliderText('scenery', 20);
+        }
+
+        // Load nodes and default road network from API
+        async function loadAppConfig() {
+            try {
+                // Fetch nodes
+                const nodesRes = await fetch('/api/nodes');
+                nodes = await nodesRes.json();
+                
+                // Fetch roads (the base network)
+                const roadsRes = await fetch('/api/roads');
+                roads = await roadsRes.json();
+                
+                // Fill Base dropdown
+                const select = document.getElementById('startPosition');
+                select.innerHTML = '';
+                
+                Object.values(nodes).forEach(node => {
+                    const opt = document.createElement('option');
+                    opt.value = node.name;
+                    opt.textContent = `${node.name}`;
+                    select.appendChild(opt);
+                });
+
+                select.addEventListener('change', (e) => {
+                    const node = nodes[e.target.value];
+                    if (node) {
+                        document.getElementById('startDescription').innerText = node.description;
+                        highlightBaseOnMap(node.name);
+                    }
+                });
+
+                // Set initial description
+                if (nodes[defaultStartBase]) {
+                    select.value = defaultStartBase;
+                    document.getElementById('startDescription').innerText = nodes[defaultStartBase].description;
+                }
+
+                // Plot nodes on Map
+                plotNodesAndNetwork();
+                
+                // Set host/IP details dynamically
+                fetch('/api/meta')
+                    .then(res => res.json())
+                    .then(meta => {
+                        if (meta.ip && meta.ip !== '127.0.0.1') {
+                            document.getElementById('mobileIpDisplay').innerText = `MOBILE ACCESS: http://${meta.ip}:8080`;
+                            document.getElementById('localHostLink').innerText = `localhost:${meta.port}`;
+                            document.getElementById('localHostLink').href = `http://localhost:${meta.port}`;
+                        } else {
+                            document.getElementById('mobileIpDisplay').innerText = `MOBILE: CONNECT WIFI`;
+                        }
+                    })
+                    .catch(() => {
+                        document.getElementById('mobileIpDisplay').innerText = `MOBILE: CONNECT WIFI`;
+                    });
+
+            } catch (err) {
+                console.error("Failed to load app config", err);
+            }
+        }
+
+        // Plot nodes and fainted roads onto map
+        function plotNodesAndNetwork() {
+            // Remove existing markers if any
+            Object.values(markers).forEach(m => map.removeLayer(m));
+            markers = {};
+
+            // Custom glowing HTML markers for bases
+            const createBaseIcon = (name, isActive) => {
+                const colorClass = isActive ? 'bg-orange-500' : 'bg-zinc-500';
+                const pulseClass = isActive ? 'animate-ping opacity-75 bg-orange-500' : 'opacity-20 bg-zinc-500';
+                const sizeClass = isActive ? 'h-4.5 w-4.5' : 'h-3 w-3';
+                
+                return L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `
+                        <div class="relative flex items-center justify-center -mt-2 -ml-2">
+                            <div class="${pulseClass} absolute inline-flex h-6 w-6 rounded-full"></div>
+                            <div class="relative inline-flex rounded-full ${sizeClass} ${colorClass} border border-[#0d0e12] shadow-md flex items-center justify-center">
+                                <span class="text-[8px] font-black text-white hud-font select-none">${name[0]}</span>
+                            </div>
+                        </div>
+                    `,
+                    iconSize: [16, 16]
+                });
+            };
+
+            // Draw roads network in fainted grey dashes
+            roads.forEach(road => {
+                const fromNode = nodes[road.from];
+                const toNode = nodes[road.to];
+                if (fromNode && toNode) {
+                    L.polyline([[fromNode.lat, fromNode.lng], [toNode.lat, toNode.lng]], {
+                        color: '#27272a',
+                        weight: 2,
+                        dashArray: '5, 8',
+                        opacity: 0.6,
+                        className: 'glowing-line-bg'
+                    }).addTo(map);
+                }
+            });
+
+            // Create markers
+            Object.values(nodes).forEach(node => {
+                const m = L.marker([node.lat, node.lng], {
+                    icon: createBaseIcon(node.name, node.name === defaultStartBase)
+                }).addTo(map);
+                
+                // Add popups
+                m.bindPopup(`
+                    <div class="bg-zinc-950 text-white p-2 rounded border border-zinc-800 text-xs">
+                        <strong class="hud-font text-orange-500 text-sm block uppercase">${node.name}</strong>
+                        <span class="text-zinc-400 block mt-1 leading-snug">${node.description}</span>
+                        <button onclick="setBaseFromPopup('${node.name}')" class="mt-2 w-full bg-orange-600 hover:bg-orange-500 font-bold py-1 px-2 rounded text-[10px] uppercase text-white tracking-widest transition-colors">START HERE</button>
+                    </div>
+                `, {
+                    closeButton: false,
+                    className: 'custom-leaflet-popup'
+                });
+                
+                markers[node.name] = m;
+            });
+
+            highlightBaseOnMap(defaultStartBase);
+        }
+
+        // Change base from popup button
+        function setBaseFromPopup(name) {
+            const select = document.getElementById('startPosition');
+            select.value = name;
+            document.getElementById('startDescription').innerText = nodes[name].description;
+            highlightBaseOnMap(name);
+            map.closePopup();
+        }
+
+        // Highlight selected base
+        function highlightBaseOnMap(activeName) {
+            Object.keys(markers).forEach(name => {
+                const m = markers[name];
+                const node = nodes[name];
+                const isActive = name === activeName;
+                
+                const colorClass = isActive ? 'bg-orange-500 shadow-[0_0_10px_#ff5300]' : 'bg-zinc-600';
+                const pulseClass = isActive ? 'animate-ping opacity-75 bg-orange-500' : 'opacity-0 bg-zinc-600';
+                const sizeClass = isActive ? 'h-4 w-4' : 'h-3 w-3';
+                
+                m.setIcon(L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `
+                        <div class="relative flex items-center justify-center -mt-2 -ml-2">
+                            <div class="${pulseClass} absolute inline-flex h-6 w-6 rounded-full"></div>
+                            <div class="relative inline-flex rounded-full ${sizeClass} ${colorClass} border border-[#0d0e12] shadow-md flex items-center justify-center">
+                                <span class="text-[8px] font-black text-white hud-font select-none">${name[0]}</span>
+                            </div>
+                        </div>
+                    `,
+                    iconSize: [16, 16]
+                }));
+            });
+        }
+
+        // Request API to generate routes
+        async function generateRoutes() {
+            const startPosition = document.getElementById('startPosition').value;
+            const preferredLength = document.getElementById('preferredLength').value;
+            
+            // Normalize weights so they sum to 1.0 (to match expectations of standard weights)
+            const cW = parseFloat(document.getElementById('curvinessWeight').value);
+            const eW = parseFloat(document.getElementById('elevationWeight').value);
+            const sW = parseFloat(document.getElementById('sceneryWeight').value);
+            const sum = cW + eW + sW;
+            const curviness = sum > 0 ? (cW / sum).toFixed(2) : "0.5";
+            const elevation = sum > 0 ? (eW / sum).toFixed(2) : "0.3";
+            const scenery = sum > 0 ? (sW / sum).toFixed(2) : "0.2";
+
+            // Animating Start Button
+            const btn = document.getElementById('engineButton');
+            const ring = document.getElementById('enginePulseRing');
+            btn.disabled = true;
+            ring.className = "absolute -inset-1.5 rounded-full bg-amber-500/30 blur-md transition-all duration-300 engine-btn-spinning";
+            btn.querySelector('.engine-btn').classList.add('animate-pulse');
+            btn.querySelector('div:nth-child(2)').innerText = "ROUTING";
+            
+            try {
+                // Call API
+                const url = `/api/routes?start=${encodeURIComponent(startPosition)}&length=${preferredLength}&type=${routeType}&curviness=${curviness}&elevation=${elevation}&scenery=${scenery}`;
+                const res = await fetch(url);
+                const suggestions = await res.json();
+                
+                displaySuggestions(suggestions);
+                
+                // Load first suggestions on map automatically if there are any
+                if (suggestions && suggestions.length > 0) {
+                    loadRouteOnMap(suggestions[0], 0);
+                }
+            } catch (err) {
+                console.error("Routing calculation failed", err);
+                alert("Routing calculation offline. Is the server running?");
+            } finally {
+                // Reset Button
+                btn.disabled = false;
+                ring.className = "absolute -inset-1.5 rounded-full bg-rose-500/10 opacity-0 group-hover:opacity-100 group-hover:scale-105 blur-md transition-all duration-300 pulse-active";
+                btn.querySelector('.engine-btn').classList.remove('animate-pulse');
+                btn.querySelector('div:nth-child(2)').innerText = "START";
+            }
+        }
+
+        // Display suggestions in the lower HUD card deck
+        function displaySuggestions(suggestions) {
+            const container = document.getElementById('suggestionsContainer');
+            const badgeCount = document.getElementById('resultCount');
+            container.innerHTML = '';
+            
+            if (!suggestions || suggestions.length === 0) {
+                badgeCount.innerText = "0 ROUTES LOADED";
+                container.innerHTML = `
+                    <div class="md:col-span-3 py-8 text-center text-rose-500 font-bold border border-rose-950/20 rounded-lg bg-[#140b0d]/50">
+                        <i data-lucide="alert-triangle" class="w-8 h-8 mx-auto mb-2 text-rose-600"></i>
+                        NO VIABLE SCENIC PATHS FOUND WITHIN CONSTRAINTS
+                        <p class="text-xs text-zinc-500 font-medium normal-case mt-1 max-w-md mx-auto">
+                            Try broadening your preferred length or choosing a different starting base. Closed loops require enough interconnected roads to cycle back.
+                        </p>
+                    </div>
+                `;
+                initIcons();
+                return;
+            }
+
+            badgeCount.innerText = `${suggestions.length} ROUTES LOADED`;
+            
+            suggestions.forEach((route, index) => {
+                // Calculate estimated driving time at 65 km/h
+                const estMin = Math.round((route.lengthKm / 65) * 60);
+                const hrs = Math.floor(estMin / 60);
+                const mins = estMin % 60;
+                const durationStr = hrs > 0 ? `${hrs}h ${mins}m` : `${mins} mins`;
+                
+                // Map custom scoring (0.0 to 10.0 scale)
+                // Drive quality scores average around 6-8, let's normalize to look spectacular
+                const scoreDisplay = Math.min(10.0, Math.max(1.0, (route.driveQualityScore * 1.5) + 3.0)).toFixed(1);
+
+                // Setup checkpoints pills
+                const checkpointPills = route.checkpoints.map((cp, idx) => {
+                    const isLast = idx === route.checkpoints.length - 1;
+                    return `
+                        <span class="text-white text-[11px] font-bold px-2 py-0.5 rounded bg-zinc-900 border border-zinc-800">
+                            ${cp}
+                        </span>
+                        ${isLast ? '' : '<i data-lucide="chevrons-right" class="w-3.5 h-3.5 text-zinc-600"></i>'}
+                    `;
+                }).join('');
+
+                const cardId = `routeCard-${index}`;
+                const card = document.createElement('div');
+                card.id = cardId;
+                card.className = "group border border-zinc-800/80 hover:border-orange-500/50 bg-[#12141c]/50 hover:bg-[#12141c]/80 p-4 rounded-xl flex flex-col justify-between transition-all duration-300 relative cursor-pointer";
+                
+                card.innerHTML = `
+                    <!-- Sleek glowing corner tag -->
+                    <div class="absolute top-0 right-0 bg-gradient-to-l from-orange-500/10 to-transparent w-16 h-16 pointer-events-none rounded-tr-xl"></div>
+                    
+                    <div>
+                        <!-- Header: Rank and Rating -->
+                        <div class="flex justify-between items-start mb-3">
+                            <div class="flex items-center space-x-1.5">
+                                <span class="hud-font bg-zinc-900 border border-zinc-800 text-[10px] px-2 py-0.5 rounded text-zinc-400">PATH #${index + 1}</span>
+                                ${route.isClosedLoop ? 
+                                    '<span class="text-[9px] bg-indigo-950/50 border border-indigo-500/20 text-indigo-400 font-extrabold tracking-wider px-1.5 py-0.5 rounded uppercase">LOOP</span>' : 
+                                    '<span class="text-[9px] bg-amber-950/50 border border-amber-500/20 text-amber-400 font-extrabold tracking-wider px-1.5 py-0.5 rounded uppercase">ONE-WAY</span>'
+                                }
+                            </div>
+                            <div class="flex items-center space-x-1 bg-[#1a1112] border border-orange-500/30 px-2.5 py-1 rounded text-orange-500 glow-orange">
+                                <i data-lucide="zap" class="w-3 h-3 fill-orange-500"></i>
+                                <span class="hud-font font-black text-sm leading-none">${scoreDisplay}</span>
+                            </div>
+                        </div>
+
+                        <!-- Info line: stats -->
+                        <div class="grid grid-cols-2 gap-2 border-y border-zinc-800/60 py-2 mb-3 text-xs">
+                            <div class="flex items-center space-x-1.5">
+                                <i data-lucide="gauge" class="w-4 h-4 text-zinc-500"></i>
+                                <div>
+                                    <p class="text-[10px] text-zinc-500 uppercase leading-none font-bold">DISTANCE</p>
+                                    <p class="hud-font font-bold text-white text-sm">${route.lengthKm} <span class="text-[10px]">KM</span></p>
+                                </div>
+                            </div>
+                            <div class="flex items-center space-x-1.5">
+                                <i data-lucide="clock" class="w-4 h-4 text-zinc-500"></i>
+                                <div>
+                                    <p class="text-[10px] text-zinc-500 uppercase leading-none font-bold">EST. DRIVE</p>
+                                    <p class="hud-font font-bold text-white text-sm">${durationStr}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Checkpoints trail -->
+                        <div class="flex flex-wrap items-center gap-1 mb-4">
+                            ${checkpointPills}
+                        </div>
+                    </div>
+
+                    <!-- Action button -->
+                    <button onclick="event.stopPropagation(); loadRouteOnMap(null, ${index})" 
+                        class="w-full bg-[#12141c] hover:bg-orange-600 hover:text-white border border-zinc-700/60 hover:border-orange-500 text-zinc-300 font-bold py-2 px-3 rounded-lg text-xs uppercase tracking-widest transition-all duration-300 flex items-center justify-center space-x-1.5 select-none mt-2">
+                        <i data-lucide="navigation-2" class="w-3.5 h-3.5"></i>
+                        <span>ENGAGE NAV ROUTE</span>
+                    </button>
+                `;
+
+                // Set card click to draw route
+                card.addEventListener('click', () => loadRouteOnMap(route, index));
+
+                container.appendChild(card);
+            });
+
+            initIcons();
+        }
+
+        let cachedSuggestions = [];
+        // Intermediary handler to draw the active glowing racing route
+        function loadRouteOnMap(route, index) {
+            // Keep a local cache of suggestions when generated to support index-only trigger from button
+            if (route) {
+                cachedSuggestions[index] = route;
+            } else {
+                route = cachedSuggestions[index];
+            }
+            
+            if (!route) return;
+
+            // Visual feedback on selected card
+            for (let i = 0; i < 3; i++) {
+                const card = document.getElementById(`routeCard-${i}`);
+                if (card) {
+                    if (i === index) {
+                        card.className = "group border border-orange-500 bg-[#12141c]/90 p-4 rounded-xl flex flex-col justify-between transition-all duration-300 relative cursor-pointer shadow-[0_0_15px_rgba(255,83,0,0.15)]";
+                        card.querySelector('button').className = "w-full bg-orange-600 hover:bg-orange-500 text-white border border-orange-500 font-bold py-2 px-3 rounded-lg text-xs uppercase tracking-widest transition-all duration-300 flex items-center justify-center space-x-1.5 select-none mt-2";
+                    } else {
+                        card.className = "group border border-zinc-800/80 hover:border-orange-500/50 bg-[#12141c]/50 hover:bg-[#12141c]/80 p-4 rounded-xl flex flex-col justify-between transition-all duration-300 relative cursor-pointer";
+                        const btn = card.querySelector('button');
+                        if (btn) btn.className = "w-full bg-[#12141c] hover:bg-orange-600 hover:text-white border border-zinc-700/60 hover:border-orange-500 text-zinc-300 font-bold py-2 px-3 rounded-lg text-xs uppercase tracking-widest transition-all duration-300 flex items-center justify-center space-x-1.5 select-none mt-2";
+                    }
+                }
+            }
+
+            // Remove existing active route graphics
+            activeRoutePolylines.forEach(layer => map.removeLayer(layer));
+            activeRoutePolylines = [];
+
+            // Draw glowing path line-by-line
+            const latlngs = route.checkpoints.map(cpName => {
+                const node = nodes[cpName];
+                return node ? [node.lat, node.lng] : null;
+            }).filter(x => x !== null);
+
+            if (latlngs.length < 2) return;
+
+            // Thick outer glow overlay (translucent orange)
+            const glowOuter = L.polyline(latlngs, {
+                color: '#ff5300',
+                weight: 12,
+                opacity: 0.25
+            }).addTo(map);
+
+            // Medium neon orange line
+            const glowMedium = L.polyline(latlngs, {
+                color: '#ff7300',
+                weight: 6,
+                opacity: 0.8,
+                className: 'glowing-line'
+            }).addTo(map);
+
+            // Bright core line (white-ish orange)
+            const glowInner = L.polyline(latlngs, {
+                color: '#ffffff',
+                weight: 2,
+                opacity: 0.95
+            }).addTo(map);
+
+            activeRoutePolylines.push(glowOuter, glowMedium, glowInner);
+
+            // Adjust base markers: highlight the sequence of nodes in active route
+            Object.keys(markers).forEach(name => {
+                const m = markers[name];
+                const cpIdx = route.checkpoints.indexOf(name);
+                const isInRoute = cpIdx >= 0;
+                const isStart = cpIdx === 0;
+
+                let colorClass = 'bg-zinc-600';
+                let pulseClass = 'opacity-0';
+                let borderClass = 'border-zinc-800';
+                let sizeClass = 'h-3 w-3';
+                
+                if (isStart) {
+                    colorClass = 'bg-emerald-500 shadow-[0_0_10px_#10b981]';
+                    pulseClass = 'animate-pulse opacity-50 bg-emerald-500 h-8 w-8';
+                    sizeClass = 'h-5 w-5';
+                } else if (isInRoute) {
+                    colorClass = 'bg-orange-500 shadow-[0_0_10px_#ff5300]';
+                    pulseClass = 'opacity-20 bg-orange-500 h-6 w-6';
+                    sizeClass = 'h-4 w-4';
+                }
+
+                m.setIcon(L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `
+                        <div class="relative flex items-center justify-center -mt-2 -ml-2">
+                            <div class="${pulseClass} absolute inline-flex rounded-full"></div>
+                            <div class="relative inline-flex rounded-full ${sizeClass} ${colorClass} border border-[#0d0e12] shadow-md flex items-center justify-center">
+                                <span class="text-[9px] font-black text-white hud-font select-none">
+                                    ${isStart ? 'S' : (isInRoute ? cpIdx : name[0])}
+                                </span>
+                            </div>
+                        </div>
+                    `,
+                    iconSize: [16, 16]
+                }));
+            });
+
+            // Pan and Zoom map to fit the generated route
+            const bounds = L.latLngBounds(latlngs);
+            map.fitBounds(bounds, {
+                padding: [50, 50],
+                maxZoom: 14,
+                animate: true,
+                duration: 1.0
+            });
+        }
+    </script>
+</body>
+</html>
